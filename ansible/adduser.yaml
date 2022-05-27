@@ -1,0 +1,45 @@
+- name: Create user
+  hosts: new
+  tasks:
+    - name: Update and upgrade apt packages
+      apt:
+        upgrade: yes
+        update_cache: yes
+        cache_valid_time: 86400 #One day
+    - name: Install sudo
+      apt:
+        name: sudo
+        state: latest
+    - name: Allow 'sudo' group to have passwordless sudo
+      lineinfile:
+        dest: /etc/sudoers
+        state: present
+        regexp: '^%sudo'
+        line: '%sudo ALL=(ALL:ALL) NOPASSWD: ALL'
+    - name: "create new user without a password"
+      user:
+        name: admin
+        create_home: yes
+        groups: admin,sudo
+        state: present
+        shell: /bin/bash
+    - name: "create .ssh for the new user"
+      file:
+        mode: 0700
+        owner: admin
+        group: admin
+        path: "/home/admin/.ssh"
+        state: directory
+    - name: "Add authorized keys"
+      authorized_key:
+        user: admin
+        key: "{{ lookup('file', '/home/' + lookup('env', 'USER') + '/.ssh/id_rsa.pub') }}"
+    - name: Disallow root SSH access
+      lineinfile: dest=/etc/ssh/sshd_config
+                  regexp="^PermitRootLogin"
+                  line="PermitRootLogin no"
+                  state=present
+      notify: Restart ssh
+  handlers:
+  - name: Restart ssh
+    service: name=ssh state=restarted
